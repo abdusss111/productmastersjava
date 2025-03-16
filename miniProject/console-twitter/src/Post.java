@@ -1,12 +1,20 @@
+import java.io.Serializable;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
-public class Post {
+public class Post implements Serializable {
+    private static final long serialVersionUID = 1L;
+
     private final String id;
     private final User author;
     private final String content;
     private int likes;
     private int reposts;
     private final long timestamp;
+    private final List<Comment> comments;  // New field for storing comments
+
 
     public Post(User author, String content) {
         this.id = UUID.randomUUID().toString().substring(0, 5);
@@ -15,6 +23,7 @@ public class Post {
         this.likes = 0;
         this.reposts = 0;
         this.timestamp = System.currentTimeMillis();
+        this.comments = new ArrayList<>();
     }
 
     public String getId() {
@@ -41,6 +50,10 @@ public class Post {
         return timestamp;
     }
 
+    public List<Comment> getComments() {
+        return comments;
+    }
+
     public void like() {
         likes++;
     }
@@ -49,8 +62,14 @@ public class Post {
         reposts++;
     }
 
+    public void addComment(User user, String content) {
+        comments.add(new Comment(user, content));
+    }
+
     @Override
     public String toString() {
-        return "Post{id=" + id + ", author=" + author.getName() + ", content='" + content + "', likes=" + likes + ", reposts=" + reposts + "}";
+        return "id: " + id + " " + author.getName() + ": " + content +
+                "\n❤️ " + likes + " | 🔁 " + reposts +
+                " | 💬 " + comments.size(); // Avoid NullPointerException
     }
 }

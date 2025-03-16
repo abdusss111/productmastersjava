@@ -1,3 +1,5 @@
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Scanner;
 
 public class Main {
@@ -7,7 +9,10 @@ public class Main {
         String name = scanner.nextLine();
         User user = new User(name);
         System.out.println("Добро пожаловать, " + user.getName() + "!");
-        TwitterConsole app = new TwitterConsole(scanner, user);
+
+        List<Post> posts = PostDB.loadPosts();
+
+        TwitterConsole app = new TwitterConsole(posts, user);
         app.start();
     }
 }
