@@ -11,9 +11,7 @@ import org.example.util.AttendanceNameUtil;
 import java.io.*;
 import java.sql.*;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 @WebServlet("/attendance")
 public class StudentAttendanceServlet extends HttpServlet {
@@ -33,27 +31,15 @@ public class StudentAttendanceServlet extends HttpServlet {
 
     @Override
     protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String groupFilter = req.getParameter("group");
 
-        List<StudentAttendanceDto> list = getStudentsFromDB();
+        List<StudentAttendanceDto> list = getStudentsFromDB(groupFilter);
+        List<String> groups = getGroupsFromDB();
 
         resp.setContentType("text/html; charset=UTF-8");
         PrintWriter out = resp.getWriter();
         out.println("<html>");
-        out.println("<style>  table {\n" +
-                "            width: 50%;\n" +
-                "            border-collapse: collapse;\n" +
-                "            margin: 20px 0;\n" +
-                "            font-size: 18px;\n" +
-                "            text-align: left;\n" +
-                "        }\n" +
-                "        th, td {\n" +
-                "            border: 1px solid black;\n" +
-                "            padding: 8px;\n" +
-                "        }\n" +
-                "        th {\n" +
-                "            background-color: #f2f2f2;\n" +
-                "        }");
-        out.println("</style>");
+        out.println("<style>  table { width: 50%; border-collapse: collapse; margin: 20px 0; font-size: 18px; text-align: left; } th, td { border: 1px solid black; padding: 8px; } th { background-color: #f2f2f2; }</style>");
         out.println("<body>");
         out.println("<h2>Посещение лекций</h2>");
 
@@ -64,41 +50,62 @@ public class StudentAttendanceServlet extends HttpServlet {
         out.println("<input type='submit' value='Добавить'>");
         out.println("</form>");
 
+        // Фильтр по группе
+        out.println("<form action='/ServletPractice/attendance' method='GET'>");
+        out.println("Группа: <select name='group'>");
+        out.println("<option value=''>Все</option>");
+        for (String group : groups) {
+            out.println("<option value='" + group + "'" + (group.equals(groupFilter) ? " selected" : "") + ">" + group + "</option>");
+        }
+        out.println("</select>");
+        out.println("<input type='submit' value='Фильтровать'>");
+        out.println("</form>");
+
         out.println("<table>");
-        out.println("    <tr>\n" +
-                "            <th>ФИО</th>\n" +
-                "            <th>Группа</th>\n" +
-                "            <th>Посетил</th>\n" +
-                "        </tr>");
+        out.println("    <tr><th>ФИО</th><th>Группа</th><th>Посетил</th><th>Действие</th></tr>");
+
         if (list.isEmpty()) {
             out.println("</table>");
-            out.println("<h1>Нет данных в таблице<h1>");
-        }
-        for (StudentAttendanceDto studentAttendanceDto : list) {
-            out.println("   <tr>\n" +
-                    "            <td>" + studentAttendanceDto.getName() + "</td>\n" +
-                    "            <td>" + studentAttendanceDto.getGroupName() + "</td>\n" +
-                    "            <td>" + AttendanceNameUtil.fromBooleanToString(studentAttendanceDto.isAttended()) + "</td>\n" +
-                    "        </tr>");
+            out.println("<h1>Нет данных в таблице</h1>");
+        } else {
+            for (StudentAttendanceDto studentAttendanceDto : list) {
+                out.println("<tr>");
+                out.println("<td>" + studentAttendanceDto.getName() + "</td>");
+                out.println("<td>" + studentAttendanceDto.getGroupName() + "</td>");
+                out.println("<td>" + AttendanceNameUtil.fromBooleanToString(studentAttendanceDto.isAttended()) + "</td>");
+                out.println("<td><a href='/ServletPractice/attendance/delete?id=" + studentAttendanceDto.getName() + "'>Удалить</a></td>");
+                out.println("</tr>");
+            }
         }
         out.println("</table>");
+        out.println("</body>");
+        out.println("</html>");
     }
 
-    private List<StudentAttendanceDto> getStudentsFromDB() {
-        String sql = "Select * from students";
+    private List<StudentAttendanceDto> getStudentsFromDB(String groupFilter) {
+        String sql = "SELECT * FROM students";
+        if (groupFilter != null && !groupFilter.isEmpty()) {
+            sql += " WHERE group_name = ?";
+        }
+
         List<StudentAttendanceDto> result = new ArrayList<>();
 
         try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-            while (rs.next()) {
-                StudentAttendanceDto dto = StudentAttendanceDto.builder()
-                        .name(rs.getString("name"))
-                        .groupName(rs.getString("group_name"))
-                        .isAttended(rs.getBoolean("is_attended"))
-                        .build();
-                result.add(dto);
+            if (groupFilter != null && !groupFilter.isEmpty()) {
+                stmt.setString(1, groupFilter);
+            }
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    StudentAttendanceDto dto = StudentAttendanceDto.builder()
+                            .name(rs.getString("name"))
+                            .groupName(rs.getString("group_name"))
+                            .isAttended(rs.getBoolean("is_attended"))
+                            .build();
+                    result.add(dto);
+                }
             }
 
         } catch (SQLException e) {
@@ -108,17 +115,99 @@ public class StudentAttendanceServlet extends HttpServlet {
         return result;
     }
 
+    private List<String> getGroupsFromDB() {
+        List<String> groups = new ArrayList<>();
+        String sql = "SELECT DISTINCT group_name FROM students";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             Statement stmt = conn.createStatement();
+             ResultSet rs = stmt.executeQuery(sql)) {
+
+            while (rs.next()) {
+                groups.add(rs.getString("group_name"));
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+
+        return groups;
+    }
 
     @Override
     protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-//        StudentAttendanceDto newStudentAttendanceInfo  = StudentAttendanceDto.builder()
-//                .name(req.getParameter("name"))
-//                .groupName(req.getParameter("groupName"))
-//                .isAttended(Boolean.parseBoolean(req.getParameter("isAttended")))
-//                .build();
-//        list.add(newStudentAttendanceInfo);
-//        saveToFile(newStudentAttendanceInfo);
-//
-//        resp.sendRedirect("/ServletPractice/attendance");
+        String name = req.getParameter("name");
+        String groupName = req.getParameter("groupName");
+        boolean isAttended = Boolean.parseBoolean(req.getParameter("isAttended"));
+
+        // Добавляем группу в таблицу groups, если она ещё не существует
+        addGroupIfNotExists(groupName);
+
+        // Сохраняем студента
+        saveStudentToDB(name, groupName, isAttended);
+
+        resp.sendRedirect("/ServletPractice/attendance");
+    }
+
+    private void addGroupIfNotExists(String groupName) {
+        String checkGroupSql = "SELECT COUNT(*) FROM groups WHERE group_name = ?";
+        String insertGroupSql = "INSERT INTO groups (group_name) VALUES (?)";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement checkStmt = conn.prepareStatement(checkGroupSql)) {
+
+            checkStmt.setString(1, groupName);
+            try (ResultSet rs = checkStmt.executeQuery()) {
+                if (rs.next() && rs.getInt(1) == 0) {
+                    try (PreparedStatement insertStmt = conn.prepareStatement(insertGroupSql)) {
+                        insertStmt.setString(1, groupName);
+                        insertStmt.executeUpdate();
+                    }
+                }
+            }
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void saveStudentToDB(String name, String groupName, boolean isAttended) {
+        String insertStudentSql = "INSERT INTO students (name, group_name, is_attended) VALUES (?, ?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(insertStudentSql)) {
+
+            stmt.setString(1, name);
+            stmt.setString(2, groupName);
+            stmt.setBoolean(3, isAttended);
+            stmt.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Обработчик удаления студента
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+        String studentName = req.getParameter("id");
+        if (studentName != null) {
+            deleteStudentFromDB(studentName);
+        }
+        resp.sendRedirect("/ServletPractice/attendance");
+    }
+
+    private void deleteStudentFromDB(String studentName) {
+        String deleteStudentSql = "DELETE FROM students WHERE name = ?";
+
+        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASSWORD);
+             PreparedStatement stmt = conn.prepareStatement(deleteStudentSql)) {
+
+            stmt.setString(1, studentName);
+            stmt.executeUpdate();
+
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
     }
 }
